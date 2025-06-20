@@ -1,0 +1,14 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+DB_URL = os.getenv("DATABASE_URL")
+DHAN_API_URL = os.getenv("DHAN_API_URL")
+DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
+DHAN_CLIENT_ID = os.getenv("DHAN_CLIENT_ID")
+
+INSTRUMENTS = [
+    {"SECURITY_ID": "NIFTY", "UNDERLYING_SYMBOL": 13, "UNDERLYING_SEGMENT": "IDX_I", "LOT_SIZE": 75, "STRIKE_RANGE": 50},
+    {"SECURITY_ID": "BANKNIFTY", "UNDERLYING_SYMBOL": 25, "UNDERLYING_SEGMENT": "IDX_I", "LOT_SIZE": 25, "STRIKE_RANGE": 100}
+]

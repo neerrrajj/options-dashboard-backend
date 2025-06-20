@@ -5,10 +5,11 @@ from datetime import datetime, timedelta
 from db import SessionLocal
 from config import INSTRUMENTS
 from models import OCSnapshot, OCMinuteSnapshot
+from rollup.compute_summary import compute_oc_summary
 
 logger = logging.getLogger(__name__)
 
-def perform_rollup_for_instrument(instrument_id: str, now_utc: datetime):
+def perform_rollup_for_instrument(instrument_id: str, expiry: datetime, now_utc: datetime):
     logger.info(f"Rolling up {instrument_id} using snapshot timestamp: {now_utc}")
     db = SessionLocal()
     ist_minute = (now_utc + timedelta(hours=5, minutes=30)).replace(second=0, microsecond=0)
@@ -31,6 +32,7 @@ def perform_rollup_for_instrument(instrument_id: str, now_utc: datetime):
     deleted_count = db.query(OCMinuteSnapshot).filter(
         and_(
             OCMinuteSnapshot.instrument == instrument_id,
+            OCMinuteSnapshot.expiry == expiry,
             OCMinuteSnapshot.ist_minute == ist_minute
         )
     ).delete()
@@ -46,6 +48,7 @@ def perform_rollup_for_instrument(instrument_id: str, now_utc: datetime):
         func.max(OCSnapshot.snapshot_time).label("max_snapshot_time")
     ).filter(
         OCSnapshot.instrument == instrument_id,
+        OCSnapshot.expiry == expiry,
         OCSnapshot.snapshot_time <= now_utc
     ).group_by(
         OCSnapshot.strike,
@@ -119,12 +122,17 @@ def perform_rollup_for_instrument(instrument_id: str, now_utc: datetime):
                 "put_volume": snap.volume,
             })
 
-    for (strike, expiry), row_data in combined_rows.items():
+    for (strike, exp), row_data in combined_rows.items():
+        call_gex = (row_data["call_gamma"] or 0.0) * (row_data["call_oi"] or 0)
+        put_gex = (row_data["put_gamma"] or 0.0) * (row_data["put_oi"] or 0)
+        net_gex = call_gex - put_gex
+        abs_gex = abs(call_gex) + abs(put_gex)
+
         row = OCMinuteSnapshot(
             timestamp=now_utc,
             ist_minute=ist_minute,
             instrument=instrument_id,
-            expiry=expiry,
+            expiry=exp,
             strike=strike,
             underlying_price=row_data["underlying_price"],
             call_delta=row_data["call_delta"],
@@ -133,16 +141,20 @@ def perform_rollup_for_instrument(instrument_id: str, now_utc: datetime):
             call_vega=row_data["call_vega"],
             call_iv=row_data["call_iv"],
             call_oi=row_data["call_oi"],
-            call_last_price=row_data["call_last_price"],
             call_volume=row_data["call_volume"],
+            call_last_price=row_data["call_last_price"],
             put_delta=row_data["put_delta"],
             put_theta=row_data["put_theta"],
             put_gamma=row_data["put_gamma"],
             put_vega=row_data["put_vega"],
             put_iv=row_data["put_iv"],
             put_oi=row_data["put_oi"],
-            put_last_price=row_data["put_last_price"],
             put_volume=row_data["put_volume"],
+            put_last_price=row_data["put_last_price"],
+            call_gex=call_gex,
+            put_gex=put_gex,
+            net_gex=net_gex,
+            abs_gex=abs_gex,
         )
         db.add(row)
 
@@ -150,3 +162,5 @@ def perform_rollup_for_instrument(instrument_id: str, now_utc: datetime):
     db.close()
     logger.info(f"Rolled up {len(combined_rows)} rows for {instrument_id} at {ist_minute}")
 
+    # Trigger summary computation
+    compute_oc_summary(db, instrument_id, expiry, ist_minute)

@@ -114,41 +114,6 @@ async def fetch_chain_for_expiry(client, instrument, expiry):
     response.raise_for_status()
     return response.json()["data"]
 
-def store_oc_data(db, instrument, expiry, oc_response):
-    """Store data for a single expiry and commit immediately"""
-    try:
-        oc, underlying_price = oc_response["oc"], oc_response["last_price"]
-        for strike_str, chain in oc.items():
-            strike = float(strike_str)
-            for opt_type in ["ce", "pe"]:
-                opt = chain.get(opt_type)
-                if not opt:
-                    continue
-
-                snapshot = OCSnapshot(
-                    instrument=instrument["SECURITY_ID"],
-                    expiry=expiry,
-                    underlying_price = underlying_price,
-                    strike=strike,
-                    option_type=opt_type.upper(),
-                    delta=opt["greeks"]["delta"],
-                    theta=opt["greeks"]["theta"],
-                    gamma=opt["greeks"]["gamma"],
-                    vega=opt["greeks"]["vega"],
-                    iv=opt["implied_volatility"],
-                    oi=opt["oi"],
-                    volume=opt["volume"],
-                    last_price=opt["last_price"],
-                )
-                db.add(snapshot)
-
-        db.commit()
-        logger.info(f"Successfully stored {instrument['SECURITY_ID']} for {expiry}")
-
-    except Exception as e:
-        logger.error(f"Error storing {instrument['SECURITY_ID']} for {expiry}: {e}")
-        raise e
-
 async def fetch_oc_data(db, client, instrument, expiry):
     """Fetch option chain data for an instrument for an expiry"""
     logger.info(f"=== Fetching option chain data of {instrument['SECURITY_ID']} for {expiry} ===")
@@ -156,7 +121,6 @@ async def fetch_oc_data(db, client, instrument, expiry):
     try:
         oc_response = await fetch_chain_for_expiry(client, instrument, expiry)
         save_snapshot_task.delay(instrument, expiry, oc_response)
-        # store_oc_data(db, instrument, expiry, oc_response)
 
     except Exception as e:
         logger.error(f"Error fetching option chain data of {instrument['SECURITY_ID']} for {expiry}: {e}")
@@ -223,8 +187,3 @@ async def fetcher():
     total_end = timer.time()
     logger.info(f"Total fetch cycle time: {(total_end - start):.2f}s")
     logger.info("-" * 50)
-
-    # return {
-        # 'timestamp': datetime.utcnow(),
-        # 'status': 'completed'
-    # }

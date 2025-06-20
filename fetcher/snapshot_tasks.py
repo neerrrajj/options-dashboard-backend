@@ -45,7 +45,7 @@ def save_snapshot_task(instrument, expiry, oc_response):
         logger.info(f"Saved snapshot for {instrument['SECURITY_ID']}")
 
         # Trigger rollup
-        rollup_task.delay(instrument["SECURITY_ID"], snapshot_time.isoformat())
+        rollup_task.delay(instrument["SECURITY_ID"], expiry, snapshot_time.isoformat())
 
     except Exception as e:
         logger.error(f"Error saving snapshot: {e}")
@@ -54,11 +54,11 @@ def save_snapshot_task(instrument, expiry, oc_response):
         db.close()
 
 @celery_app.task
-def rollup_task(instrument_id, snapshot_time=None):
+def rollup_task(instrument_id, expiry, snapshot_time=None):
     """Deduplicated 1-min rollup task"""
     if snapshot_time:
         now_utc = datetime.fromisoformat(snapshot_time)
     else:
         now_utc = datetime.utcnow().replace(microsecond=0)
 
-    perform_rollup_for_instrument(instrument_id, now_utc)
+    perform_rollup_for_instrument(instrument_id, expiry, now_utc)

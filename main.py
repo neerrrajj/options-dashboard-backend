@@ -4,7 +4,6 @@ from fastapi import FastAPI
 
 from db import Base, engine
 from fetcher.fetcher import fetcher
-# from processors.minute_snapshot import rollup_minute_snapshot
 
 logging.basicConfig(
     level=logging.INFO,

@@ -15,7 +15,7 @@ class OCSnapshot(Base):
     expiry = Column(Date)
     underlying_price = Column(Float)
     strike = Column(Float)
-    option_type = Column(String)  # 'CE' or 'PE'
+    option_type = Column(String)
     delta = Column(Float)
     theta = Column(Float)
     gamma = Column(Float)
@@ -30,7 +30,7 @@ class OCMinuteSnapshot(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     timestamp = Column(DateTime, default=datetime.utcnow)
-    ist_minute = Column(DateTime, index=True, nullable=False)  # IST rounded minute
+    ist_minute = Column(DateTime, index=True, nullable=False)
     instrument = Column(String, index=True)
     expiry = Column(Date, index=True)
     underlying_price = Column(Float)
@@ -58,8 +58,32 @@ class OCMinuteSnapshot(Base):
     put_gex = Column(Float)
     net_gex = Column(Float)
     abs_gex = Column(Float)
-    
 
     __table_args__ = (
-        Index('ix_minute_snapshot_unique', "timestamp", "instrument", "expiry", "strike", unique=True),
+        Index('ix_snapshots_minute_instrument', "ist_minute", "instrument"),
+        Index('ix_snapshots_netgex', "ist_minute", "instrument", "net_gex"),
+        Index('ix_snapshots_absgex', "ist_minute", "instrument", "abs_gex"),
+    )
+
+class OCSummary(Base):
+    __tablename__ = "oc_summary"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    timestamp = Column(DateTime, default=datetime.utcnow)
+    ist_minute = Column(DateTime, index=True, nullable=False)
+    instrument = Column(String, index=True)
+    expiry = Column(Date, index=True)
+    underlying_price = Column(Float)
+
+    total_net_gex = Column(Float)
+    gamma_flip_level = Column(Float)
+    otm_call_vega = Column(Float)
+    otm_put_vega = Column(Float)
+    otm_call_theta = Column(Float)
+    otm_put_theta = Column(Float)
+    otm_call_delta = Column(Float)
+    otm_put_delta = Column(Float)
+
+    __table_args__ = (
+        Index("ix_summary_minute_instrument", "ist_minute", "instrument"),
     )

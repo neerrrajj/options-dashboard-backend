@@ -4,12 +4,12 @@ from datetime import datetime
 from db import SessionLocal
 from models import OCSnapshot
 from celery_config import celery_app
-from rollup.rollup_minute import perform_rollup_for_instrument
+from tasks.rollup_minute import rollup_minute_task
 
 logger = logging.getLogger(__name__)
 
 @celery_app.task
-def save_snapshot_task(instrument, expiry, oc_response):
+def save_oc_snapshot_task(instrument, expiry, oc_response, fetch_cycle_count):
     """Save raw snapshot and trigger rollup task"""
     db = SessionLocal()
     try:
@@ -42,23 +42,13 @@ def save_snapshot_task(instrument, expiry, oc_response):
                 db.add(snapshot)
 
         db.commit()
-        logger.info(f"Saved snapshot for {instrument['SECURITY_ID']}")
+        logger.info(f"[SAVE SNAPSHOT] Saved for {instrument['SECURITY_ID']} ({expiry}). Snapshot time (UTC): {snapshot_time}")
 
         # Trigger rollup
-        rollup_task.delay(instrument["SECURITY_ID"], expiry, snapshot_time.isoformat())
+        rollup_minute_task.delay(instrument["SECURITY_ID"], expiry, snapshot_time.isoformat())
 
     except Exception as e:
-        logger.error(f"Error saving snapshot: {e}")
+        logger.error(f"[SAVE SNAPSHOT] Error saving for {instrument['SECURITY_ID']} ({expiry}). Snapshot time (UTC): {snapshot_time}. {e}")
         db.rollback()
     finally:
         db.close()
-
-@celery_app.task
-def rollup_task(instrument_id, expiry, snapshot_time=None):
-    """Deduplicated 1-min rollup task"""
-    if snapshot_time:
-        now_utc = datetime.fromisoformat(snapshot_time)
-    else:
-        now_utc = datetime.utcnow().replace(microsecond=0)
-
-    perform_rollup_for_instrument(instrument_id, expiry, now_utc)

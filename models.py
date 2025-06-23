@@ -5,26 +5,6 @@ from sqlalchemy import Column, String, Float, DateTime, Date, BigInteger, Index
 
 from db import Base
 
-class OCSnapshot(Base):
-    __tablename__ = "oc_snapshots"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    timestamp = Column(DateTime, default=datetime.utcnow)
-    snapshot_time = Column(DateTime, nullable=False)
-    instrument = Column(String)
-    expiry = Column(Date)
-    underlying_price = Column(Float)
-    strike = Column(Float)
-    option_type = Column(String)
-    delta = Column(Float)
-    theta = Column(Float)
-    gamma = Column(Float)
-    vega = Column(Float)
-    iv = Column(Float)
-    oi = Column(BigInteger)
-    last_price = Column(Float)
-    volume = Column(BigInteger)
-
 class OCMinuteSnapshot(Base):
     __tablename__ = "oc_minute_snapshots"
 

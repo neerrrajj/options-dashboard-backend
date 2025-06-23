@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 from db import SessionLocal
 # from models import OCMinuteSnapshot
-from tasks.save_oc_snapshot_test import save_oc_snapshot_task
+from tasks.save_oc_snapshot import save_oc_snapshot_task
 from config import DHAN_API_URL, DHAN_ACCESS_TOKEN, DHAN_CLIENT_ID, INSTRUMENTS
 
 logger = logging.getLogger(__name__)

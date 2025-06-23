@@ -10,13 +10,16 @@ from tasks.compute_summary import oc_summary_task
 logger = logging.getLogger(__name__)
 
 @celery_app.task
-def save_oc_snapshot_task(instrument, expiry, oc_response, fetch_cycle_count):
+def save_oc_snapshot_task(instrument, expiry, oc_response, closing_snapshot_time):
     db = SessionLocal()
 
     try:
         oc, underlying_price = oc_response["oc"], oc_response["last_price"]
         snapshot_time = datetime.utcnow().replace(microsecond=0)
-        ist_minute = (snapshot_time + timedelta(hours=5, minutes=30)).replace(second=0, microsecond=0)
+        if closing_snapshot_time:
+            ist_minute = closing_snapshot_time
+        else:
+            ist_minute = (snapshot_time + timedelta(hours=5, minutes=30)).replace(second=0, microsecond=0)
 
         instrument_id = instrument["SECURITY_ID"]
         strike_range = instrument["STRIKE_RANGE"]

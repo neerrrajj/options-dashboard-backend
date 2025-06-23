@@ -1,5 +1,6 @@
 import os
 from dotenv import load_dotenv
+from datetime import timedelta
 
 load_dotenv()
 
@@ -7,6 +8,8 @@ DB_URL = os.getenv("DATABASE_URL")
 DHAN_API_URL = os.getenv("DHAN_API_URL")
 DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
 DHAN_CLIENT_ID = os.getenv("DHAN_CLIENT_ID")
+
+IST_OFFSET = timedelta(hours=5, minutes=30)
 
 INSTRUMENTS = [
     {

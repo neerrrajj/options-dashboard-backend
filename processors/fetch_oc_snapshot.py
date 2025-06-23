@@ -2,123 +2,102 @@ import httpx
 import logging
 import asyncio
 import time as timer
-# from sqlalchemy import and_
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 from db import SessionLocal
-# from models import OCMinuteSnapshot
 from tasks.save_oc_snapshot import save_oc_snapshot_task
-from config import DHAN_API_URL, DHAN_ACCESS_TOKEN, DHAN_CLIENT_ID, INSTRUMENTS
+from models import OCMinuteSnapshot, HistoricalOCSnapshot
+from utils import get_last_trading_day, is_trading_day, is_pre_market_hours
+from config import DHAN_API_URL, DHAN_ACCESS_TOKEN, DHAN_CLIENT_ID, INSTRUMENTS, IST_OFFSET
 
 logger = logging.getLogger(__name__)
 
 fetch_cycle_count = 1
-IST_OFFSET = timedelta(hours=5, minutes=30)
-# closing_snapshot_fetched = False
-
 headers = {
     "Content-Type": "application/json",
     "access-token": DHAN_ACCESS_TOKEN,
     "client-id": DHAN_CLIENT_ID
 }
 
-# async def is_closing_snapshot_needed():
-#     """Checks and fetches missing 3:30 PM snapshot"""
-#     logger.info("Checking if 3:30 PM closing snapshot is needed...")
-#     db = SessionLocal()
+async def closing_snapshot_check():
+    """Check if last trading day's closing snapshot exists in the correct table. If missing, fetch and store it once."""
+    db = SessionLocal()
 
-#     today_ist = (datetime.utcnow() + IST_OFFSET).date()
+    try:
+        now_ist = datetime.utcnow() + IST_OFFSET
+        today_ist = now_ist.date()
 
-#     async with httpx.AsyncClient() as client:
-#         try:
-#             for instrument in INSTRUMENTS:
-#                 expiries = await fetch_expiries(client, instrument)
+        if is_trading_day(today_ist):
+            if is_pre_market_hours(now_ist):
+                target_trading_day = get_last_trading_day(today_ist - timedelta(days=1))
+                check_time_ist = datetime.combine(target_trading_day, time(15, 25))
+                table = HistoricalOCSnapshot
+            elif time(9, 0) <= now_ist.time() <= time(15, 31):
+                logger.info("[CLOSE CHECK] Market is currently open, skipping closing snapshot check")
+                return
+            else:
+                target_trading_day = today_ist
+                check_time_ist = datetime.combine(today_ist, time(15, 29))
+                table = OCMinuteSnapshot
+        else:
+            target_trading_day = get_last_trading_day(today_ist - timedelta(days=1))
+            check_time_ist = datetime.combine(target_trading_day, time(15, 25))
+            table = HistoricalOCSnapshot
 
-#                 for expiry in expiries:
-#                     closing_snapshot_exists = db.query(OCMinuteSnapshot).filter(
-#                         and_(
-#                             OCMinuteSnapshot.instrument == instrument["SECURITY_ID"],
-#                             OCMinuteSnapshot.expiry == expiry,
-#                             OCMinuteSnapshot.ist_minute == datetime.combine(today_ist, time(15, 30))
-#                         )
-#                     ).first()
+        closing_snapshot_time = datetime.combine(target_trading_day, time(15, 29))
 
-#                     if closing_snapshot_exists:
-#                         logger.info(f"Closing snapshot exists for {instrument['SECURITY_ID']} ({expiry}) today, skipping")
-#                     else:
-#                         logger.info(f"No closing snapshot for {instrument['SECURITY_ID']} ({expiry}) today, fetching")
-#                         await fetch_oc_data(db, client, instrument, expiry, fetch_cycle_count)
-#                         await asyncio.sleep(3)
-#         except Exception as e:
-#             logger.error(f"Error in checking closing snapshot: {e}")
-#         finally:
-#             db.close()
+        logger.info(f"[CLOSE CHECK] Checking for closing snapshot of {target_trading_day} at {check_time_ist} in {table.__tablename__}")
+        async with httpx.AsyncClient() as client:
+            for instrument in INSTRUMENTS:
+                instrument_id = instrument["SECURITY_ID"]
+                expiries = await fetch_expiries(client, instrument)
 
-# def is_closing_snapshot_needed(db, instrument, expiry):
-#     now_utc = datetime.utcnow()
-#     now_ist = now_utc + IST_OFFSET
-#     today_ist = now_ist.date()
-#     market_open_today_ist = datetime.combine(today_ist, time(9, 15))
-#     market_open_today_utc = market_open_today_ist - IST_OFFSET
-#     market_close_today_ist = datetime.combine(today_ist, time(15, 30))
-#     market_close_today_utc = market_close_today_ist - IST_OFFSET
+                top_expiries = get_top_n_expiries(instrument, expiries)
+                if not top_expiries:
+                    logger.warning(f"[CLOSE CHECK] No valid expiries found for {instrument_id}")
+                    continue
 
-#     if now_utc > market_close_today_utc:
-#         closing_snapshot_exists = db.query(OCSnapshot).filter(
-#             and_(
-#                 OCSnapshot.instrument == instrument["SECURITY_ID"],
-#                 OCSnapshot.expiry == expiry,
-#                 OCSnapshot.timestamp >= market_close_today_utc,
-#                 OCSnapshot.timestamp <= now_utc
-#             )
-#         ).first()
+                for expiry_date, expiry in top_expiries:
+                    exists = db.query(table).filter(
+                        table.instrument == instrument_id,
+                        table.expiry == expiry,
+                        table.ist_minute == check_time_ist
+                    ).first()
+                    if exists:
+                        logger.info(f"[CLOSE CHECK] {table.__tablename__} has {instrument_id} ({expiry}) snapshot at {check_time_ist}")
+                        continue
 
-#         if closing_snapshot_exists:
-#             logger.info(f"Closing snapshot already exists for {instrument['SECURITY_ID']} today, skipping")
-#             return False
-#         else:
-#             logger.info(f"No closing snapshot for {instrument['SECURITY_ID']} today, fetching")
-#             return True
+                    logger.warning(f"[CLOSE CHECK] Missing {instrument_id} ({expiry}) snapshot at {check_time_ist} in {table.__tablename__}. Fetching...")
+                    try:
+                        await fetch_oc_data(db, client, instrument, expiry, closing_snapshot_time=closing_snapshot_time)
+                    except Exception as e:
+                        logger.error(f"[CLOSE CHECK] Error fetching closing snapshot for {instrument_id} ({expiry}): {e}")
 
-#     if now_utc < market_open_today_utc:
-#         yesterday_ist = today_ist - timedelta(days=1)
-#         market_close_yesterday_ist = datetime.combine(yesterday_ist, time(15, 30))
-#         market_close_yesterday_utc = market_close_yesterday_ist - IST_OFFSET
+                    await asyncio.sleep(3)
 
-#         closing_snapshot_exists = db.query(OCSnapshot).filter(
-#             and_(
-#                 OCSnapshot.instrument == instrument["SECURITY_ID"],
-#                 OCSnapshot.expiry == expiry,
-#                 OCSnapshot.timestamp >= market_close_yesterday_utc,
-#                 OCSnapshot.timestamp <= now_utc
-#             )
-#         ).first()
+    except Exception as e:
+        logger.error(f"[CLOSE CHECK] Unexpected error: {e}")
+    finally:
+        db.close()
 
-#         if closing_snapshot_exists:
-#             logger.info(f"Closing snapshot exists from yesterday for {instrument['SECURITY_ID']}, skipping")
-#             return False
-#         else:
-#             logger.info(f"No closing snapshot from yesterday for {instrument['SECURITY_ID']}, fetching")
-#             return True
-    
-#     return False
-
-def get_ordered_expiry_dates(expiries):
-    """Get the expiry dates in ascending order"""
+def get_top_n_expiries(instrument, expiries, expiry_limit=None):
+    """Get the top N expiry dates in ascending order"""
     if not expiries:
-        return None
+        return []
+    if expiry_limit is None:
+        expiry_limit = instrument.get("EXPIRIES", 7)
     today = datetime.now().date()
     expiry_dates = []
+
     for exp in expiries:
-        exp_date = datetime.strptime(exp, "%Y-%m-%d").date() # YYYY-MM-DD
+        exp_date = datetime.strptime(exp, "%Y-%m-%d").date()
         if exp_date >= today:
             expiry_dates.append((exp_date, exp))
-
     if not expiry_dates:
-        return expiries[0]
+        return []
 
     expiry_dates.sort(key=lambda x: x[0])
-    return expiry_dates
+    return expiry_dates[:expiry_limit]
 
 async def fetch_expiries(client, instrument):
     url = f"{DHAN_API_URL}/optionchain/expirylist"
@@ -143,13 +122,13 @@ async def fetch_chain_for_expiry(client, instrument, expiry):
     response.raise_for_status()
     return response.json()["data"]
 
-async def fetch_oc_data(db, client, instrument, expiry, fetch_cycle_count):
+async def fetch_oc_data(db, client, instrument, expiry, closing_snapshot_time=None):
     """Fetch option chain data for an instrument for an expiry"""
     logger.info(f"=== Fetching option chain data of {instrument['SECURITY_ID']} for {expiry} ===")
 
     try:
         oc_response = await fetch_chain_for_expiry(client, instrument, expiry)
-        save_oc_snapshot_task.delay(instrument, expiry, oc_response, fetch_cycle_count)
+        save_oc_snapshot_task.delay(instrument, expiry, oc_response, closing_snapshot_time)
 
     except Exception as e:
         logger.error(f"Error fetching option chain data of {instrument['SECURITY_ID']} for {expiry}: {e}")
@@ -161,20 +140,23 @@ async def fetcher():
     async with httpx.AsyncClient() as client:
         db = SessionLocal()
         try:
-            logger.info(f"=== Fetch Cycle {fetch_cycle_count } ===")
+            logger.info(f"=== Fetch Cycle {fetch_cycle_count} ===")
 
-            # Fetching current expiries
+            # Fetching for current expiries
             logger.info("Fetching for current expiry...")
             current_start = timer.time()
             current_count = 0
 
             for instrument in INSTRUMENTS:
                 expiries = await fetch_expiries(client, instrument)
-                current_expiry = get_ordered_expiry_dates(expiries)[0][1]
+                top_expiries = get_top_n_expiries(instrument, expiries)
+                if not top_expiries:
+                    logger.warning(f"No valid expiries found for {instrument['SECURITY_ID']}")
+                    continue
+                current_expiry = top_expiries[0][1]
 
-                # if is_market_open() or is_closing_snapshot_needed(db, instrument, current_expiry):
                 instrument_start = timer.time()
-                await fetch_oc_data(db, client, instrument, current_expiry, fetch_cycle_count)
+                await fetch_oc_data(db, client, instrument, current_expiry)
                 instrument_end = timer.time()
                 logger.info(f"{instrument['SECURITY_ID']} current: {(instrument_end - instrument_start):.2f}s")
                 await asyncio.sleep(3)
@@ -183,30 +165,27 @@ async def fetcher():
             current_end = timer.time()
             logger.info(f"Current expiry total ({current_count} instruments): {(current_end - current_start):.2f}s")
 
-            # Fetching other expiries
+            # Fetching for other expiries
             logger.info("Fetching for other expiries...")
-            # if fetch_cycle_count % 6 == 0:
             other_start = timer.time()
             other_count = 0
 
             for instrument in INSTRUMENTS:
                 expiries = await fetch_expiries(client, instrument)
-                current_expiry = get_ordered_expiry_dates(expiries)[0][1]
-
-                expiry_limit = instrument.get("EXPIRIES", 7)
-                limited_expiries = expiries[:expiry_limit]
-                other_expiries = [exp for exp in limited_expiries if exp != current_expiry]
+                top_expiries = get_top_n_expiries(instrument, expiries)
+                if not top_expiries:
+                    logger.warning(f"No valid expiries found for {instrument['SECURITY_ID']}")
+                    continue
+                current_expiry = top_expiries[0][1]
+                other_expiries = [expiry for expiry_date, expiry in top_expiries[1:]]
 
                 for expiry in other_expiries:
-                    # if is_market_open() or is_closing_snapshot_needed(db, instrument, expiry):
-                    await fetch_oc_data(db, client, instrument, expiry, fetch_cycle_count)
+                    await fetch_oc_data(db, client, instrument, expiry)
                     await asyncio.sleep(3)
                     other_count += 1
 
             other_end = timer.time()
             logger.info(f"Other expiries total ({other_count} instruments): {(other_end - other_start):.2f}s")
-            # else:
-            #     logger.info("Skipping other expiries this cycle")
 
             fetch_cycle_count += 1
 

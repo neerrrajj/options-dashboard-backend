@@ -11,6 +11,7 @@ from api import gex, greeks, meta
 from processors.fetch_oc_snapshot import fetcher, closing_snapshot_check
 from queue_manager import init_queue
 from processors.oc_processor import queue_consumer
+from scheduler import start_scheduler
 
 TESTING = False
 
@@ -34,6 +35,10 @@ async def start_services():
     # Start queue consumer
     asyncio.create_task(queue_consumer())
     logger.info("[STARTUP] Queue consumer started")
+    
+    # Start scheduler (retention jobs)
+    await start_scheduler()
+    logger.info("[STARTUP] Scheduler started")
     
     # Start fetcher loop
     async def fetcher_loop():

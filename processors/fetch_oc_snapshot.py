@@ -7,7 +7,7 @@ from datetime import datetime, time, timedelta
 from db import SessionLocal
 from models import OCMinuteSnapshot, HistoricalOCSnapshot
 from utils import get_last_trading_day, is_trading_day, is_pre_market_hours
-from config import DHAN_API_URL, DHAN_ACCESS_TOKEN, DHAN_CLIENT_ID, INSTRUMENTS, IST_OFFSET
+from config import DHAN_API_URL, DHAN_ACCESS_TOKEN, DHAN_CLIENT_ID, INSTRUMENTS, IST_TIMEZONE
 from queue_manager import OCDataItem, get_queue
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ async def closing_snapshot_check():
     db = SessionLocal()
 
     try:
-        now_ist = datetime.utcnow() + IST_OFFSET
+        now_ist = datetime.now(IST_TIMEZONE)
         today_ist = now_ist.date()
 
         if is_trading_day(today_ist):

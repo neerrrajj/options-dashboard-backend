@@ -6,6 +6,7 @@ Runs nightly to maintain the rolling window of high-granularity data.
 
 import logging
 from datetime import datetime, time, timedelta, date
+from zoneinfo import ZoneInfo
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
 
@@ -15,6 +16,7 @@ from models import (
     HistoricalOCSnapshot, HistoricalOCSummary
 )
 from utils import is_trading_day
+from config import IST_TIMEZONE
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +34,7 @@ def get_rollup_target_date(today: date = None) -> date:
         Date that should be rolled up
     """
     if today is None:
-        today = datetime.utcnow().date()
+        today = datetime.now(IST_TIMEZONE).date()
     
     # Rollup the date that is 31 days old
     target_date = today - timedelta(days=31)

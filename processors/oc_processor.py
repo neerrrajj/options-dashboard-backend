@@ -14,7 +14,7 @@ from sqlalchemy.dialects.postgresql import insert
 from db import SessionLocal
 from models import OCMinuteSnapshot, OCSummary
 from queue_manager import OCDataItem, get_queue
-from config import INSTRUMENTS
+from config import INSTRUMENTS, IST_TIMEZONE
 
 logger = logging.getLogger(__name__)
 
@@ -172,7 +172,7 @@ def calculate_summary(
     otm_put_delta = sum(r["put_delta"] or 0 for r in rows if r["strike"] <= atm)
     
     return {
-        "timestamp": datetime.utcnow(),
+        "timestamp": datetime.now(IST_TIMEZONE),
         "ist_minute": ist_minute,
         "instrument": instrument_id,
         "expiry": expiry,
@@ -273,11 +273,14 @@ def process_oc_data(item: OCDataItem) -> None:
             return
         
         # Determine timestamp
-        snapshot_time = datetime.utcnow().replace(microsecond=0)
+        snapshot_time = datetime.now(IST_TIMEZONE).replace(microsecond=0)
         if closing_snapshot_time:
             ist_minute = closing_snapshot_time
+            # Ensure timezone-aware
+            if ist_minute.tzinfo is None:
+                ist_minute = ist_minute.replace(tzinfo=IST_TIMEZONE)
         else:
-            ist_minute = (snapshot_time + timedelta(hours=5, minutes=30)).replace(second=0, microsecond=0)
+            ist_minute = snapshot_time.replace(second=0, microsecond=0)
         
         logger.info(f"[PROCESS] Processing {instrument['SECURITY_ID']} ({expiry}) at IST {ist_minute}")
         

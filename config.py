@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from datetime import timedelta
+from zoneinfo import ZoneInfo
 
 load_dotenv()
 
@@ -9,7 +9,8 @@ DHAN_API_URL = os.getenv("DHAN_API_URL")
 DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
 DHAN_CLIENT_ID = os.getenv("DHAN_CLIENT_ID")
 
-IST_OFFSET = timedelta(hours=5, minutes=30)
+# Use proper timezone instead of manual offset
+IST_TIMEZONE = ZoneInfo("Asia/Kolkata")
 
 INSTRUMENTS = [
     {

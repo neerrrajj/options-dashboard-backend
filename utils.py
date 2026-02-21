@@ -1,7 +1,8 @@
 import logging
 from datetime import datetime, timedelta, time, date
+from zoneinfo import ZoneInfo
 
-from config import IST_OFFSET, HOLIDAYS
+from config import IST_TIMEZONE, HOLIDAYS
 
 logger = logging.getLogger(__name__)
 
@@ -11,7 +12,7 @@ def is_market_open(now_ist=None, TESTING=False):
         return True
 
     if not now_ist:
-        now_ist = datetime.utcnow() + IST_OFFSET
+        now_ist = datetime.now(IST_TIMEZONE)
 
     is_market_time = time(9, 15) <= now_ist.time() <= time(15, 30)
 
@@ -27,7 +28,9 @@ def get_last_trading_day(d: date) -> date:
 def is_trading_day(d: date) -> bool:
     return d.weekday() < 5 and d.isoformat() not in HOLIDAYS
 
-def is_pre_market_hours(now_ist: datetime) -> bool:
+def is_pre_market_hours(now_ist: datetime = None) -> bool:
+    if now_ist is None:
+        now_ist = datetime.now(IST_TIMEZONE)
     pre_market_end = time(9, 0)
     current_time = now_ist.time()
     return current_time < pre_market_end

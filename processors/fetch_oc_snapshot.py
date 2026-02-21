@@ -5,7 +5,6 @@ import time as timer
 from datetime import datetime, time, timedelta
 
 from db import SessionLocal
-from tasks.save_oc_snapshot import save_oc_snapshot_task
 from models import OCMinuteSnapshot, HistoricalOCSnapshot
 from utils import get_last_trading_day, is_trading_day, is_pre_market_hours
 from config import DHAN_API_URL, DHAN_ACCESS_TOKEN, DHAN_CLIENT_ID, INSTRUMENTS, IST_OFFSET
@@ -130,7 +129,9 @@ async def fetch_oc_data(db, client, instrument, expiry, closing_snapshot_time=No
 
     try:
         oc_response = await fetch_chain_for_expiry(client, instrument, expiry)
-        save_oc_snapshot_task.delay(instrument, expiry, oc_response, closing_snapshot_time)
+        # TODO: Queue data for processing (will be implemented in Group 3)
+        # Data: instrument, expiry, oc_response, closing_snapshot_time
+        logger.info(f"[FETCH] Data fetched for {instrument['SECURITY_ID']} {expiry}, queued for processing")
 
     except Exception as e:
         logger.error(f"Error fetching option chain data of {instrument['SECURITY_ID']} for {expiry}: {e}")

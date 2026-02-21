@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy import Column, String, Float, DateTime, Date, BigInteger, Index
+from sqlalchemy import Column, String, Float, DateTime, Date, BigInteger, Index, UniqueConstraint
 
 from db import Base
 
@@ -40,6 +40,7 @@ class OCMinuteSnapshot(Base):
     abs_gex = Column(Float)
 
     __table_args__ = (
+        UniqueConstraint('instrument', 'expiry', 'ist_minute', 'strike', name='uq_snapshot_lookup'),
         Index('ix_snapshots_minute_instrument', "ist_minute", "instrument"),
         Index('ix_snapshots_netgex', "ist_minute", "instrument", "net_gex"),
         Index('ix_snapshots_absgex', "ist_minute", "instrument", "abs_gex"),
@@ -65,6 +66,7 @@ class OCSummary(Base):
     otm_put_delta = Column(Float)
 
     __table_args__ = (
+        UniqueConstraint('instrument', 'expiry', 'ist_minute', name='uq_summary_lookup'),
         Index("ix_summary_minute_instrument", "ist_minute", "instrument"),
     )
 
@@ -103,6 +105,7 @@ class HistoricalOCSnapshot(Base):
     abs_gex = Column(Float)
 
     __table_args__ = (
+        UniqueConstraint('instrument', 'expiry', 'ist_minute', 'strike', name='uq_hist_snapshot_lookup'),
         Index('ix_hist_snapshots_minute_instrument', "ist_minute", "instrument"),
     )
 
@@ -126,5 +129,6 @@ class HistoricalOCSummary(Base):
     otm_put_delta = Column(Float)
 
     __table_args__ = (
+        UniqueConstraint('instrument', 'expiry', 'ist_minute', name='uq_hist_summary_lookup'),
         Index("ix_hist_summary_minute_instrument", "ist_minute", "instrument"),
     )

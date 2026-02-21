@@ -56,6 +56,8 @@ async def closing_snapshot_check():
                 if not top_expiries:
                     logger.warning(f"[CLOSE CHECK] No valid expiries found for {instrument_id}")
                     continue
+                if table == HistoricalOCSnapshot:
+                    top_expiries = [top_expiries[0]]
 
                 for expiry_date, expiry in top_expiries:
                     exists = db.query(table).filter(
@@ -165,27 +167,27 @@ async def fetcher():
             current_end = timer.time()
             logger.info(f"Current expiry total ({current_count} instruments): {(current_end - current_start):.2f}s")
 
-            # Fetching for other expiries
-            logger.info("Fetching for other expiries...")
-            other_start = timer.time()
-            other_count = 0
+            # # Fetching for other expiries
+            # logger.info("Fetching for other expiries...")
+            # other_start = timer.time()
+            # other_count = 0
 
-            for instrument in INSTRUMENTS:
-                expiries = await fetch_expiries(client, instrument)
-                top_expiries = get_top_n_expiries(instrument, expiries)
-                if not top_expiries:
-                    logger.warning(f"No valid expiries found for {instrument['SECURITY_ID']}")
-                    continue
-                current_expiry = top_expiries[0][1]
-                other_expiries = [expiry for expiry_date, expiry in top_expiries[1:]]
+            # for instrument in INSTRUMENTS:
+            #     expiries = await fetch_expiries(client, instrument)
+            #     top_expiries = get_top_n_expiries(instrument, expiries)
+            #     if not top_expiries:
+            #         logger.warning(f"No valid expiries found for {instrument['SECURITY_ID']}")
+            #         continue
+            #     current_expiry = top_expiries[0][1]
+            #     other_expiries = [expiry for expiry_date, expiry in top_expiries[1:]]
 
-                for expiry in other_expiries:
-                    await fetch_oc_data(db, client, instrument, expiry)
-                    await asyncio.sleep(3)
-                    other_count += 1
+            #     for expiry in other_expiries:
+            #         await fetch_oc_data(db, client, instrument, expiry)
+            #         await asyncio.sleep(3)
+            #         other_count += 1
 
-            other_end = timer.time()
-            logger.info(f"Other expiries total ({other_count} instruments): {(other_end - other_start):.2f}s")
+            # other_end = timer.time()
+            # logger.info(f"Other expiries total ({other_count} instruments): {(other_end - other_start):.2f}s")
 
             fetch_cycle_count += 1
 

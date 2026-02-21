@@ -15,8 +15,8 @@ celery_app.conf.update(
     enable_utc=False,
     beat_schedule={
         'rollup-daily-at-12-10am': {
-            'task': 'rollup.historical_rollup.rollup_to_historical',
-            'schedule': crontab(hour=11, minute=45),  # 11:45 PM IST
+            'task': 'tasks.rollup_historical.rollup_historical_task',
+            'schedule': crontab(hour=23, minute=45),  # 11:45 PM IST
         }
     }
 )

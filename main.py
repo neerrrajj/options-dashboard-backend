@@ -2,10 +2,12 @@ import asyncio
 import logging
 from fastapi import FastAPI
 from datetime import datetime, timedelta
+from fastapi.middleware.cors import CORSMiddleware
 
 from db import Base, engine
 from config import IST_OFFSET
 from utils import is_market_open
+from api import gex, greeks, meta
 from processors.fetch_oc_snapshot import fetcher, closing_snapshot_check
 
 TESTING = False
@@ -38,6 +40,23 @@ async def start_fetcher():
     asyncio.create_task(fetcher_loop())
     asyncio.create_task(closing_snapshot_check())
 
+origins = [
+    "http://localhost:3000",  # Frontend URL
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,  # Can be ["*"] for development
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
 @app.get("/")
 def read_root():
     return {"status": "Backend is running"}
+
+# app.include_router(meta.router)
+app.include_router(gex.router)
+app.include_router(greeks.router)

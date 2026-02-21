@@ -18,6 +18,8 @@ def cleanup_intraday_data(db, instrument, ist_date):
         OCMinuteSnapshot.ist_minute <= day_end_ist
     ).delete(synchronize_session=False)
 
+    db.flush()
+
     # Delete OCSummary
     summary_count = db.query(OCSummary).filter(
         OCSummary.instrument == instrument,
@@ -25,6 +27,8 @@ def cleanup_intraday_data(db, instrument, ist_date):
         OCSummary.ist_minute <= day_end_ist
     ).delete(synchronize_session=False)
 
+    db.flush()
+
     logger.info(
-        f"[DAILY CLEANUP] Deleted no raw snapshot rows (UTC), {minute_count} 1-min, and {summary_count} summary rows for {instrument} on IST {ist_date}"
+        f"[DAILY CLEANUP] Deleted {minute_count} 1-min, and {summary_count} summary rows for {instrument} of IST {ist_date}"
     )

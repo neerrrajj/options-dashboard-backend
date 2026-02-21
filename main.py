@@ -9,6 +9,8 @@ from config import IST_OFFSET
 from utils import is_market_open
 from api import gex, greeks, meta
 from processors.fetch_oc_snapshot import fetcher, closing_snapshot_check
+from queue_manager import init_queue
+from processors.oc_processor import queue_consumer
 
 TESTING = False
 
@@ -24,7 +26,16 @@ logger = logging.getLogger(__name__)
 
 
 @app.on_event("startup")
-async def start_fetcher():
+async def start_services():
+    # Initialize queue
+    init_queue(maxsize=100)
+    logger.info("[STARTUP] Queue initialized")
+    
+    # Start queue consumer
+    asyncio.create_task(queue_consumer())
+    logger.info("[STARTUP] Queue consumer started")
+    
+    # Start fetcher loop
     async def fetcher_loop():
         while True:
             now = datetime.utcnow() + IST_OFFSET
@@ -39,6 +50,7 @@ async def start_fetcher():
 
     asyncio.create_task(fetcher_loop())
     asyncio.create_task(closing_snapshot_check())
+    logger.info("[STARTUP] Fetcher and closing snapshot check started")
 
 origins = [
     "http://localhost:3000",  # Frontend URL

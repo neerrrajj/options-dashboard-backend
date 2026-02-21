@@ -8,6 +8,7 @@ from db import SessionLocal
 from models import OCMinuteSnapshot, HistoricalOCSnapshot
 from utils import get_last_trading_day, is_trading_day, is_pre_market_hours
 from config import DHAN_API_URL, DHAN_ACCESS_TOKEN, DHAN_CLIENT_ID, INSTRUMENTS, IST_OFFSET
+from queue_manager import OCDataItem, get_queue
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +71,7 @@ async def closing_snapshot_check():
 
                     logger.warning(f"[CLOSE CHECK] Missing {instrument_id} ({expiry}) snapshot at {check_time_ist} in {table.__tablename__}. Fetching...")
                     try:
-                        await fetch_oc_data(db, client, instrument, expiry, closing_snapshot_time=closing_snapshot_time)
+                        await fetch_oc_data(client, instrument, expiry, closing_snapshot_time=closing_snapshot_time)
                     except Exception as e:
                         logger.error(f"[CLOSE CHECK] Error fetching closing snapshot for {instrument_id} ({expiry}): {e}")
 
@@ -123,18 +124,27 @@ async def fetch_chain_for_expiry(client, instrument, expiry):
     response.raise_for_status()
     return response.json()["data"]
 
-async def fetch_oc_data(db, client, instrument, expiry, closing_snapshot_time=None):
-    """Fetch option chain data for an instrument for an expiry"""
+async def fetch_oc_data(client, instrument, expiry, closing_snapshot_time=None):
+    """Fetch option chain data for an instrument for an expiry and queue for processing."""
     logger.info(f"=== Fetching option chain data of {instrument['SECURITY_ID']} for {expiry} ===")
 
     try:
         oc_response = await fetch_chain_for_expiry(client, instrument, expiry)
-        # TODO: Queue data for processing (will be implemented in Group 3)
-        # Data: instrument, expiry, oc_response, closing_snapshot_time
-        logger.info(f"[FETCH] Data fetched for {instrument['SECURITY_ID']} {expiry}, queued for processing")
+        
+        # Queue data for processing (non-blocking)
+        queue = get_queue()
+        item = OCDataItem(
+            instrument=instrument,
+            expiry=expiry,
+            oc_response=oc_response,
+            closing_snapshot_time=closing_snapshot_time
+        )
+        await queue.put(item)
+        
+        logger.info(f"[FETCH] Data fetched and queued for {instrument['SECURITY_ID']} ({expiry}). Queue size: {queue.qsize()}")
 
     except Exception as e:
-        logger.error(f"Error fetching option chain data of {instrument['SECURITY_ID']} for {expiry}: {e}")
+        logger.error(f"[FETCH] Error fetching option chain data of {instrument['SECURITY_ID']} for {expiry}: {e}")
 
 async def fetcher():
     start = timer.time()
@@ -159,7 +169,7 @@ async def fetcher():
                 current_expiry = top_expiries[0][1]
 
                 instrument_start = timer.time()
-                await fetch_oc_data(db, client, instrument, current_expiry)
+                await fetch_oc_data(client, instrument, current_expiry)
                 instrument_end = timer.time()
                 logger.info(f"{instrument['SECURITY_ID']} current: {(instrument_end - instrument_start):.2f}s")
                 await asyncio.sleep(3)

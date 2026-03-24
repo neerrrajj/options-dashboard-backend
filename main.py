@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from db import Base, engine
 from config import IST_TIMEZONE
 from utils import is_market_open
-from api import gex, greeks, symbols
+from api import gex, greeks, symbols, positional
 from processors.fetch_oc_snapshot import fetcher, closing_snapshot_check
 from queue_manager import init_queue
 from processors.oc_processor import queue_consumer
@@ -78,3 +78,4 @@ def read_root():
 app.include_router(gex.router)
 app.include_router(greeks.router)
 app.include_router(symbols.router)
+app.include_router(positional.router)

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from fastapi.middleware.cors import CORSMiddleware
 
 from db import Base, engine
-from config import IST_TIMEZONE
+from config import IST_TIMEZONE, OPERATIONAL
 from utils import is_market_open
 from api import gex, greeks, symbols, positional
 from processors.fetch_oc_snapshot import fetcher, closing_snapshot_check
@@ -40,22 +40,25 @@ async def start_services():
     await start_scheduler()
     logger.info("[STARTUP] Scheduler started")
     
-    # Start fetcher loop
-    async def fetcher_loop():
-        while True:
-            now = datetime.now(IST_TIMEZONE)
+    # Start fetcher only if operational
+    if OPERATIONAL:
+        async def fetcher_loop():
+            while True:
+                now = datetime.now(IST_TIMEZONE)
 
-            if is_market_open(now, TESTING):
-                asyncio.create_task(fetcher())
+                if is_market_open(now, TESTING):
+                    asyncio.create_task(fetcher())
 
-            # Sleep until the next exact minute
-            next_minute = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
-            sleep_duration = max((next_minute - datetime.now(IST_TIMEZONE)).total_seconds(), 0)
-            await asyncio.sleep(sleep_duration)
+                # Sleep until the next exact minute
+                next_minute = (now + timedelta(minutes=1)).replace(second=0, microsecond=0)
+                sleep_duration = max((next_minute - datetime.now(IST_TIMEZONE)).total_seconds(), 0)
+                await asyncio.sleep(sleep_duration)
 
-    asyncio.create_task(fetcher_loop())
-    asyncio.create_task(closing_snapshot_check())
-    logger.info("[STARTUP] Fetcher and closing snapshot check started")
+        asyncio.create_task(fetcher_loop())
+        asyncio.create_task(closing_snapshot_check())
+        logger.info("[STARTUP] Fetcher and closing snapshot check started (OPERATIONAL=true)")
+    else:
+        logger.info("[STARTUP] Fetcher disabled (OPERATIONAL=false) - serving historical data only")
 
 origins = [
     "http://localhost:3000",  # Frontend URL

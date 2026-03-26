@@ -9,6 +9,9 @@ DHAN_API_URL = os.getenv("DHAN_API_URL")
 DHAN_ACCESS_TOKEN = os.getenv("DHAN_ACCESS_TOKEN")
 DHAN_CLIENT_ID = os.getenv("DHAN_CLIENT_ID")
 
+# Operational status - controls whether fetcher hits Dhan API
+OPERATIONAL = os.getenv("OPERATIONAL", "false").lower() == "true"
+
 # Use proper timezone instead of manual offset
 IST_TIMEZONE = ZoneInfo("Asia/Kolkata")
 

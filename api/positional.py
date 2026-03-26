@@ -8,6 +8,18 @@ from pydantic import BaseModel
 import yfinance as yf
 import pandas as pd
 import numpy as np
+import requests
+
+# Create session with browser headers to bypass Yahoo Finance blocking
+_session = requests.Session()
+_session.headers.update({
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.5",
+    "Accept-Encoding": "gzip, deflate",
+    "Connection": "keep-alive",
+    "Upgrade-Insecure-Requests": "1",
+})
 
 logger = logging.getLogger(__name__)
 
@@ -262,8 +274,8 @@ def get_positional_stats(request: StatsRequest):
         
         logger.info(f"[POSITIONAL] Fetching data for {request.symbol} from {buffer_start} to {end_date}")
         
-        # Fetch data from Yahoo Finance
-        ticker = yf.Ticker(request.symbol)
+        # Fetch data from Yahoo Finance using custom session with browser headers
+        ticker = yf.Ticker(request.symbol, session=_session)
         data = ticker.history(start=buffer_start, end=end_date)
         
         if data.empty:

@@ -8,18 +8,25 @@ from pydantic import BaseModel
 import yfinance as yf
 import pandas as pd
 import numpy as np
-import requests
 
-# Create session with browser headers to bypass Yahoo Finance blocking
-_session = requests.Session()
-_session.headers.update({
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.5",
-    "Accept-Encoding": "gzip, deflate",
-    "Connection": "keep-alive",
-    "Upgrade-Insecure-Requests": "1",
-})
+try:
+    # Try to use curl_cffi for better TLS impersonation
+    from curl_cffi import requests as curl_requests
+    _session = curl_requests.Session(impersonate="chrome120")
+    logging.info("[POSITIONAL] Using curl_cffi for Yahoo Finance requests")
+except ImportError:
+    # Fallback to regular requests with headers
+    import requests
+    _session = requests.Session()
+    _session.headers.update({
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.5",
+        "Accept-Encoding": "gzip, deflate",
+        "Connection": "keep-alive",
+        "Upgrade-Insecure-Requests": "1",
+    })
+    logging.info("[POSITIONAL] Using regular requests for Yahoo Finance")
 
 logger = logging.getLogger(__name__)
 

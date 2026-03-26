@@ -4,15 +4,18 @@ import logging
 from datetime import datetime, date, timedelta
 from typing import Optional
 from fastapi import APIRouter, HTTPException
+from httpcore import request
 from pydantic import BaseModel
 import yfinance as yf
 import pandas as pd
 import numpy as np
 
+# Create session for Yahoo Finance requests
 try:
-    # Try to use curl_cffi for better TLS impersonation
+    # Try to use curl_cffi for better TLS impersonation (bypasses cloud provider blocking)
     from curl_cffi import requests as curl_requests
     _session = curl_requests.Session(impersonate="chrome120")
+    _use_curl_cffi = True
     logging.info("[POSITIONAL] Using curl_cffi for Yahoo Finance requests")
 except ImportError:
     # Fallback to regular requests with headers
@@ -26,6 +29,7 @@ except ImportError:
         "Connection": "keep-alive",
         "Upgrade-Insecure-Requests": "1",
     })
+    _use_curl_cffi = False
     logging.info("[POSITIONAL] Using regular requests for Yahoo Finance")
 
 logger = logging.getLogger(__name__)
@@ -281,10 +285,27 @@ def get_positional_stats(request: StatsRequest):
         
         logger.info(f"[POSITIONAL] Fetching data for {request.symbol} from {buffer_start} to {end_date}")
         
-        # Fetch data from Yahoo Finance using custom session with browser headers
-        ticker = yf.Ticker(request.symbol, session=_session)
-        data = ticker.history(start=buffer_start, end=end_date)
-        
+        # # Fetch data from Yahoo Finance using custom session
+        # ticker = yf.Ticker(request.symbol)
+        # # Attach session directly (required for curl_cffi compatibility)
+        # ticker.session = _session
+        # data = ticker.history(start=buffer_start, end=end_date)
+
+        data = yf.download(
+            request.symbol,
+            start=str(buffer_start),
+            end=str(end_date),
+            session=_session,
+            progress=False,
+            auto_adjust=True
+        )
+        # Flatten MultiIndex columns if present
+        if isinstance(data.columns, pd.MultiIndex):
+            data.columns = data.columns.get_level_values(0)
+        if data.empty:
+            raise HTTPException(status_code=404, detail=f"No data found for symbol: {request.symbol}")
+        logger.info(f"[POSITIONAL] Fetched {len(data)} rows for {request.symbol}")
+
         if data.empty:
             raise HTTPException(status_code=404, detail=f"No data found for symbol: {request.symbol}")
         

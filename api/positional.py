@@ -139,7 +139,7 @@ def resample_data(data: pd.DataFrame, frequency: str, week_start_day: str, month
     return data
 
 
-def calculate_statistics(df: pd.DataFrame) -> dict:
+def calculate_statistics(df: pd.DataFrame, start_date: date = None) -> dict:
     """Calculate all statistics from price data."""
     if df.empty:
         return {}
@@ -165,6 +165,10 @@ def calculate_statistics(df: pd.DataFrame) -> dict:
     
     # Remove first row (no prev_close)
     df = df.dropna()
+    
+    # Filter to actual start date (remove buffer day used for calculations)
+    if start_date:
+        df = df[df.index.date >= start_date]
     
     if df.empty:
         return {}
@@ -252,8 +256,9 @@ def get_positional_stats(request: StatsRequest):
         start_date = datetime.strptime(request.start_date, "%Y-%m-%d").date()
         end_date = datetime.strptime(request.end_date, "%Y-%m-%d").date()
         
-        # Add buffer for calculations
+        # Add buffer for calculations (need 1 extra day for prev_close calculations)
         buffer_start = start_date - timedelta(days=10)
+        analysis_start = start_date - timedelta(days=1)
         
         logger.info(f"[POSITIONAL] Fetching data for {request.symbol} from {buffer_start} to {end_date}")
         
@@ -269,14 +274,14 @@ def get_positional_stats(request: StatsRequest):
         # Resample if needed
         data = resample_data(data, request.frequency, request.week_start_day or "Monday", request.month_start_day or 1)
         
-        # Filter to requested date range
-        data = data[data.index.date >= start_date]
+        # Filter to requested date range (keep 1 extra day for prev_close calculations)
+        data = data[data.index.date >= analysis_start]
         
         if data.empty:
             raise HTTPException(status_code=404, detail="No data in selected date range")
         
         # Calculate statistics
-        stats = calculate_statistics(data)
+        stats = calculate_statistics(data, start_date)
         
         if not stats:
             raise HTTPException(status_code=500, detail="Failed to calculate statistics")

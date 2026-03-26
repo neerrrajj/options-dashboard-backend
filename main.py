@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from fastapi import FastAPI
 from datetime import datetime, timedelta
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +15,16 @@ from processors.oc_processor import queue_consumer
 from scheduler import start_scheduler
 
 TESTING = False
+
+# Get allowed origins from env or use defaults
+FRONTEND_URL = os.getenv("FRONTEND_URL", "")
+DEFAULT_ORIGINS = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+# Add production frontend URL if set
+if FRONTEND_URL:
+    DEFAULT_ORIGINS.append(FRONTEND_URL)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -60,13 +71,9 @@ async def start_services():
     else:
         logger.info("[STARTUP] Fetcher disabled (OPERATIONAL=false) - serving historical data only")
 
-origins = [
-    "http://localhost:3000",  # Frontend URL
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,  # Can be ["*"] for development
+    allow_origins=DEFAULT_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
